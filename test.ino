@@ -22,9 +22,10 @@ void loop(){
       arr[i] = mySerial.read();
       Serial.print(arr[i]);
     }
+    
+    Serial.println("");
   }
   
   int arr[17] = {0,};
-  Serial.println("");
-  delay(2000);
+  
 }
