@@ -26,6 +26,6 @@ void loop(){
     Serial.println("");
   }
   
-  int arr[17] = {0,};
+  arr[17] = {0,};
   
 }
