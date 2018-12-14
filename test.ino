@@ -22,8 +22,6 @@ void loop(){
       arr[i] = mySerial.read();
       Serial.print(arr[i]);
     }
-    
-    Serial.println("");
   }
   
   arr[17] = {0,};
