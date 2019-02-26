@@ -28,6 +28,14 @@ def on_message(client, userdata, msg):
         print("없다")
 # 시간조정, 공조기 조정 등 들어가야함.
 
+    if 'hm' in eval(data).keys(): # 습도 조절
+        if not ser.is_open:
+            ser.open()
+        humidity = eval(data)['hm']
+        hmData = [0,0,0,0]
+        ser.write(hmData)
+        ser.close()
+
 
 def recvTime(msg):
     print(msg)
