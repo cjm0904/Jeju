@@ -1,5 +1,5 @@
 #include <SoftwareSerial.h>
-#include <Arduino_JSON.h>
+#include <ArduinoJson.h>
 
 #define CNUM "C002"
 SoftwareSerial mySerial(50,51);
@@ -30,7 +30,8 @@ unsigned long now = millis();
 //GW에서 min, max 값 등의 유저지정값 받아오는 함수
 void readStd(){
   String myStd = Serial.readString();
-  JSONVar myObject =  JSON.parse(myStd);
+  StaticJsonDocument<200> myObject;
+  DeserializationError error = deserializeJson(myObject, myStd);
   if(CNUM==myObject["deviceNo"]){
     hm = atoi(myObject["hm"]);
     hx = atoi(myObject["hx"]);
@@ -93,6 +94,11 @@ void loop() {
   String myData = "";
   String result = "";
 
+  String airq = "";
+  int m=0, n=0;
+  int sendData[8] = {0x03, 0x03, 0x00, 0x65, 0x00, 0x03, 0x14, 0x36};
+  int re[11];
+
   int first_co2 = 0, first_temp = 0, first_humid = 0;
   int scnd_co2=0, scnd_temp=0, scnd_humid=0;
   int thrd_co2=0, thrd_temp=0, thrd_humid=0;
@@ -133,11 +139,28 @@ void loop() {
    }else{
     myData = "0000000000000000000000000000000000";
    }
-   
+
+   //airQ
+   digitalWrite(rede, HIGH);
+   for(m=0;m<9;m++){
+    mySerial.write((byte)sendData[m]);
+   }
+   digitalWrite(rede, LOW);
+   if(mySerial.available()>0){
+   for(n=0;n<11;n++){
+    re[n]=mySerial.read();
+   }
+  }
+  thrd_co2 = 256*re[3] + re[4];
+  thrd_temp = 256*re[5] + re[6];
+  thrd_humid = 256*re[7] + re[8];
+  airq = String(re[3]) + String(re[4]) + String(re[5]) + String(re[6]) + String(re[7]) + String(re[8]); 
+  
    result += CNUM;
    result += data + myData;  
 //   result += data;
-   result += airQ();   
+//   result += airQ();
+   result += airq;   
 
    first_co2 = (arr[0]-48)*1000 + (arr[1]-48)*100 + (arr[2]-48)*10 + (arr[3]-48); //단위 ppm
    first_temp = (arr[6]-48)*100 + (arr[7]-48)*10 + (arr[9]-48)*1; // nature temp * 10
@@ -147,9 +170,9 @@ void loop() {
    scnd_temp = (arr2[6]-48)*100 + (arr2[7]-48)*10 + (arr2[9]-48)*1; // nature temp * 10
    scnd_humid = (arr2[11]-48)*100 + (arr2[12]-48)*10 + arr2[14] *1; // nature humidty * 10
 
-   thrd_co2 = (arr[0]-48)*1000 + (arr[1]-48)*100 + (arr[2]-48)*10 + (arr[3]-48); //단위 ppm
-   thrd_temp = (arr[6]-48)*100 + (arr[7]-48)*10 + (arr[9]-48)*1; // nature temp * 10
-   thrd_humid = (arr[11]-48)*100 + (arr[12]-48)*10 + arr[14] *1; // nature humidty * 10
+//   thrd_co2 = (arr[0]-48)*1000 + (arr[1]-48)*100 + (arr[2]-48)*10 + (arr[3]-48); //단위 ppm
+//   thrd_temp = (arr[6]-48)*100 + (arr[7]-48)*10 + (arr[9]-48)*1; // nature temp * 10
+//   thrd_humid = (arr[11]-48)*100 + (arr[12]-48)*10 + arr[14] *1; // nature humidty * 10
 
    if(first_co2>0 && scnd_co2>0 && thrd_co2>0){
     avgCo2 = (first_co2 + scnd_co2 + thrd_co2)/3;
@@ -167,93 +190,107 @@ void loop() {
       }
     }else{
       vtFlag = 0;
-      digitalWrite(relayVetil, HIGH);
+      digitalWrite(relayVentil, HIGH);
     }
-   }   
+   }
+
+   if(avgHumid>0){
+    if(vtFlag ==0){
+      if(avgHumid<hm){
+        hmFlag = 1;
+        digitalWrite(relayHm, LOW);
+      }else if(avgHumid>hx){
+        hmFlag = 0;
+        digitalWrite(relayHm, HIGH);
+      }
+    }
+   }
 
    if(avgCo2>0){
     if(vtFlag == 0){
       if(avgCo2<cm){
         coFlag = 1;
-        digitalWrite(relayCo, HIGH);
+        digitalWrite(relayCo, LOW);
       }else if(avgCo2>cx){
         coFlag = 0;
-        digitalWrite(relayCo, LOW);
+        digitalWrite(relayCo, HIGH);
       }
     }
    }
    
-   if(avgCo2>0 && avgHumid>0){
-    if(avgCo2>cx && avgHumid>hx){
-       if(!vtFlag){
-        vtFlag = true;
-        vtTime = millis();
-        digitalWrite(relayVentil, LOW); //vetilation ON
-       }else{
-        if(now - coTime > 300000){
-          vtFlag = false;
-          digitalWrite(relayVentil, HIGH);  
-        }else{
-         vtFlag = true;
-         digitalWrite(relayVentil, LOW);
-        }
-       }
-    }
-   }
-   if(avgCo2>0){
-    if(!vtFlag){
-      if(avgCo2<cm){
-        coFlag = true;
-        coTime = millis();
-        digitalWrite(relayCo, LOW); //Co2 generator on
-        }else{
-          if(now - coTime>300000){
-            coFlag = false;
-            digitalWrite(relayCo, HIGH);
-          }else{
-            coFlag = true;
-            digitalWrite(relayCo, LOW);
-          }
-        }
-      }
-    }
-
-  if(avgHumid>0){
-    if(!vtFlag){
-      if(avgHumid<hm){
-        hmFlag=true;
-        hmTime=millis();
-        digitalWrite(relayHm, LOW);
-      }else{
-        if(now - hmTime>300000){
-          coFlag = false;
-          digitalWrite(relayHm, HIGH);
-        }else{
-          hmFlag = true;
-          digitalWrite(relayHm, LOW);
-        }
-      }
-    }
-  }
-    
-   if(avgCo2>0){
-    Serial.println(avgCo2);
-    if(avgCo2<cm){
-      if(!coFlag){
-        //function of operating co2 generator is needed.
-        coFlag = true;
-        coTime = millis();
-        digitalWrite(relayCo,LOW);
-        }else{
-          if(now-coTime>(300000)){ // 5 min
-            coFlag = false;
-            digitalWrite(relayCo,HIGH);
-            }
-          }
-         }else if(avgCo2>cm && avgCo2>cx){
-          digitalWrite(relayCo, LOW);
-         }
-    }
+//   if(avgCo2>0 && avgHumid>0){
+//    if(avgCo2>cx && avgHumid>hx){
+//       if(!vtFlag){
+//        vtFlag = true;
+//        vtTime = millis();
+//        digitalWrite(relayVentil, LOW); //vetilation ON
+//       }else{
+//        if(now - coTime > 300000){
+//          vtFlag = false;
+//          digitalWrite(relayVentil, HIGH);  
+//        }else{
+//         vtFlag = true;
+//         digitalWrite(relayVentil, LOW);
+//        }
+//       }
+//    }
+//   }
+//
+//   
+//   if(avgCo2>0){
+//    if(!vtFlag){
+//      if(avgCo2<cm){
+//        coFlag = true;
+//        coTime = millis();
+//        digitalWrite(relayCo, LOW); //Co2 generator on
+//        }else{
+//          if(now - coTime>300000){
+//            coFlag = false;
+//            digitalWrite(relayCo, HIGH);
+//          }else{
+//            coFlag = true;
+//            digitalWrite(relayCo, LOW);
+//          }
+//        }
+//      }
+//    }
+//
+//  if(avgHumid>0){
+//    if(!vtFlag){
+//      if(avgHumid<hm){
+//        hmFlag=true;
+//        hmTime=millis();
+//        digitalWrite(relayHm, LOW);
+//      }else{
+//        if(now - hmTime>300000){
+//          coFlag = false;
+//          digitalWrite(relayHm, HIGH);
+//        }else{
+//          hmFlag = true;
+//          digitalWrite(relayHm, LOW);
+//        }
+//      }
+//    }
+//  }
+//    
+//   if(avgCo2>0){
+//    Serial.println(avgCo2);
+//    if(avgCo2<cm){
+//      if(!coFlag){
+//        //function of operating co2 generator is needed.
+//        coFlag = true;
+//        coTime = millis();
+//        digitalWrite(relayCo,LOW);
+//        }else{
+//          if(now-coTime>(300000)){ // 5 min
+//            coFlag = false;
+//            digitalWrite(relayCo,HIGH);
+//            }
+//          }
+//         }else if(avgCo2>cm && avgCo2>cx){
+//          digitalWrite(relayCo, LOW);
+//         }
+//    }
    
 //릴레이모듈 완료
    result += hmFlag;
